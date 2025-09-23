@@ -1,17 +1,19 @@
 # python-orb
 
-Async Python client for the Orb local API — query datasets, manage configurations, and fetch analytics from Orb locally.
+Async Python client for the Orb Local API — access datasets from your Orb devices locally.
 
-> **⚠️ Important Notice**: This is a template implementation based on common REST API patterns. The API endpoints, models, and functionality should be validated and updated according to the actual Orb Local Analytics API specification from the [official documentation](https://orb.net/docs/deploy-and-configure/local-analytics).
+This implementation is based on the official Orb Local Analytics API specification and provides typed access to Orb datasets including scores, responsiveness, speed tests, and web responsiveness measurements.
 
 ## Features
 
 - **Async/await support**: Built with `httpx` for modern async Python applications
 - **Typed models**: Uses Pydantic for robust data validation and type safety
-- **Comprehensive API coverage**: Supports datasets (list, details, query) and status endpoints
+- **Official API support**: Implements the official Orb Local API specification
+- **Dataset access**: Supports all Orb datasets (scores, responsiveness, speed, web responsiveness)
+- **Caller ID tracking**: Proper caller ID management for efficient polling
+- **Multiple formats**: Supports both JSON and JSONL response formats
 - **Retry logic**: Built-in exponential backoff retry for robust error handling
 - **Clear exceptions**: Structured exception hierarchy for different error types
-- **JSON handling**: Automatic JSON serialization/deserialization
 - **Context manager support**: Automatic resource cleanup
 
 ## Installation
@@ -33,23 +35,24 @@ import asyncio
 from orb import OrbClient
 
 async def main():
-    async with OrbClient(base_url="http://localhost:8080") as client:
-        # Get system status
-        status = await client.get_status()
-        print(f"Orb status: {status.status}")
+    async with OrbClient(base_url="http://localhost:7080", caller_id="my-app") as client:
+        # Get latest scores
+        scores = await client.get_scores_1m()
+        if scores:
+            latest = scores[-1]
+            print(f"Orb Score: {latest['orb_score']}")
         
-        # List datasets
-        datasets = await client.list_datasets()
-        for dataset in datasets:
-            print(f"Dataset: {dataset.name}")
+        # Get responsiveness data
+        responsiveness = await client.get_responsiveness_1s()
+        if responsiveness:
+            latest = responsiveness[-1]
+            print(f"Lag: {latest['lag_avg_us']} μs")
         
-        # Query a dataset
-        if datasets:
-            result = await client.query_dataset(
-                datasets[0].name,
-                "SELECT * FROM table LIMIT 10"
-            )
-            print(f"Query returned {result.row_count} rows")
+        # Get speed test results
+        speed_tests = await client.get_speed_results()
+        if speed_tests:
+            latest = speed_tests[-1]
+            print(f"Download: {latest['download_kbps']} Kbps")
 
 asyncio.run(main())
 ```
@@ -64,7 +67,8 @@ The main client class for interacting with the Orb API.
 
 ```python
 OrbClient(
-    base_url: str = "http://localhost:8080",
+    base_url: str = "http://localhost:7080",
+    caller_id: str = "python-orb-client",
     timeout: float = 30.0,
     max_retries: int = 3,
     retry_delay: float = 1.0,
@@ -73,7 +77,8 @@ OrbClient(
 ```
 
 **Parameters:**
-- `base_url`: Base URL for the Orb API (default: "http://localhost:8080")
+- `base_url`: Base URL for the Orb Local API (default: "http://localhost:7080")
+- `caller_id`: Unique caller ID for tracking requests (default: "python-orb-client")
 - `timeout`: Request timeout in seconds (default: 30.0)
 - `max_retries`: Maximum number of retry attempts (default: 3)
 - `retry_delay`: Base delay between retries in seconds (default: 1.0)
@@ -81,124 +86,101 @@ OrbClient(
 
 #### Methods
 
-##### `async get_status() -> Status`
+##### `async get_dataset(name: str, format: str = "json", caller_id: Optional[str] = None) -> List[Dict[str, Any]]`
 
-Get the current status of the Orb system.
-
-**Returns:** `Status` object with system information
-
-**Example:**
-```python
-status = await client.get_status()
-print(f"Status: {status.status}")
-print(f"Version: {status.version}")
-print(f"Uptime: {status.uptime}")
-```
-
-##### `async list_datasets() -> List[Dataset]`
-
-List all available datasets.
-
-**Returns:** List of `Dataset` objects
-
-**Example:**
-```python
-datasets = await client.list_datasets()
-for dataset in datasets:
-    print(f"{dataset.name}: {dataset.row_count} rows")
-```
-
-##### `async get_dataset(name: str) -> DatasetDetails`
-
-Get detailed information about a specific dataset.
+Get dataset records from the Orb Local API.
 
 **Parameters:**
-- `name`: Dataset name
+- `name`: Dataset name (`scores_1m`, `responsiveness_1s`, `responsiveness_15s`, `responsiveness_1m`, `speed_results`, `web_responsiveness_results`)
+- `format`: Response format (`json` or `jsonl`) (default: `json`)
+- `caller_id`: Override the default caller ID for this request
 
-**Returns:** `DatasetDetails` object with comprehensive dataset information
-
-**Example:**
-```python
-details = await client.get_dataset("my_dataset")
-print(f"Description: {details.description}")
-print(f"Columns: {len(details.columns)}")
-```
-
-##### `async query_dataset(name: str, query: str, limit: Optional[int] = None, offset: Optional[int] = None, parameters: Optional[Dict[str, Any]] = None) -> DatasetQueryResponse`
-
-Execute a query against a dataset.
-
-**Parameters:**
-- `name`: Dataset name
-- `query`: SQL query to execute
-- `limit`: Maximum number of rows to return
-- `offset`: Number of rows to skip
-- `parameters`: Query parameters for parameterized queries
-
-**Returns:** `DatasetQueryResponse` with query results
+**Returns:** List of dataset records as dictionaries
 
 **Example:**
 ```python
-result = await client.query_dataset(
-    "sales_data",
-    "SELECT * FROM sales WHERE amount > ? LIMIT ?",
-    limit=100,
-    parameters=[1000, 100]
-)
-
-print(f"Found {result.row_count} rows")
-for row in result.data:
-    print(row)
+records = await client.get_dataset("scores_1m")
+for record in records:
+    print(f"Orb Score: {record['orb_score']}")
 ```
 
-### Data Models
+##### Convenience Methods
 
-#### Dataset
+The client provides convenient methods for each dataset type:
 
-Basic dataset information.
+```python
+# Get 1-minute scores data
+scores = await client.get_scores_1m()
 
-**Fields:**
-- `name: str` - Dataset name (required)
-- `description: Optional[str]` - Dataset description
-- `created_at: Optional[datetime]` - Creation timestamp
-- `updated_at: Optional[datetime]` - Last update timestamp
-- `schema_: Optional[Dict[str, Any]]` - Dataset schema
-- `size: Optional[int]` - Dataset size in bytes
-- `row_count: Optional[int]` - Number of rows
+# Get responsiveness data at different intervals
+resp_1s = await client.get_responsiveness_1s()
+resp_15s = await client.get_responsiveness_15s()  
+resp_1m = await client.get_responsiveness_1m()
 
-#### DatasetDetails
+# Get speed test results
+speed_tests = await client.get_speed_results()
 
-Detailed dataset information extending Dataset.
+# Get web responsiveness results
+web_resp = await client.get_web_responsiveness_results()
+```
 
-**Additional Fields:**
-- `columns: Optional[List[Dict[str, Any]]]` - Column information
-- `indexes: Optional[List[Dict[str, Any]]]` - Index information
-- `metadata: Optional[Dict[str, Any]]` - Additional metadata
+### Dataset Records
 
-#### DatasetQueryResponse
+The client provides typed Pydantic models for each dataset type:
 
-Query execution results.
+#### BaseDatasetRecord
 
-**Fields:**
-- `query: str` - The executed query (required)
-- `data: List[Dict[str, Any]]` - Query result data (required)
-- `columns: List[str]` - Column names (required)
-- `row_count: int` - Number of rows returned (required)
-- `execution_time_ms: Optional[float]` - Query execution time in milliseconds
-- `metadata: Optional[Dict[str, Any]]` - Additional query metadata
+Base model with common fields for all dataset records.
 
-#### Status
+**Common Fields:**
+- `orb_id: str` - Orb Sensor identifier
+- `orb_name: str` - Current Orb friendly name
+- `device_name: str` - Hostname or device name
+- `orb_version: str` - Semantic version of collecting Orb
+- `timestamp: int` - Timestamp in epoch milliseconds
+- `network_type: Optional[int]` - Network interface type (0=unknown, 1=wifi, 2=ethernet, 3=other)
+- `country_code: Optional[str]` - Geocoded 2-digit ISO country code
+- `public_ip: Optional[str]` - Public IP address
+- `latitude/longitude: Optional[float]` - Orb location coordinates
 
-System status information.
+#### Scores1mRecord
 
-**Fields:**
-- `status: str` - Overall system status (required)
-- `version: Optional[str]` - Orb version
-- `uptime: Optional[str]` - System uptime
-- `timestamp: Optional[datetime]` - Status timestamp
-- `services: Optional[Dict[str, Any]]` - Service status details
-- `metrics: Optional[Dict[str, Union[int, float, str]]]` - System metrics
-- `health: Optional[Dict[str, Any]]` - Health check results
+1-minute aggregated scores dataset.
+
+**Key Fields:**
+- `orb_score: Optional[float]` - Overall Orb Score (0-100)
+- `responsiveness_score: Optional[float]` - Responsiveness component (0-100)
+- `speed_score: Optional[float]` - Speed component (0-100)
+- `lag_avg_us: Optional[float]` - Average lag in microseconds
+- `download_avg_kbps/upload_avg_kbps: Optional[int]` - Speed measurements
+
+#### ResponsivenessRecord
+
+Responsiveness measurements (1s, 15s, 1m intervals).
+
+**Key Fields:**
+- `lag_avg_us: Optional[int]` - Average lag in microseconds
+- `latency_avg_us: Optional[int]` - Average latency in microseconds  
+- `packet_loss_pct: Optional[float]` - Packet loss percentage
+- `jitter_avg_us: Optional[int]` - Average jitter in microseconds
+
+#### SpeedRecord
+
+Speed test results.
+
+**Key Fields:**
+- `download_kbps: Optional[int]` - Download speed in Kbps
+- `upload_kbps: Optional[int]` - Upload speed in Kbps
+- `speed_test_server: Optional[str]` - Test server URL
+
+#### WebResponsivenessRecord
+
+Web responsiveness measurements.
+
+**Key Fields:**
+- `ttfb_us: Optional[int]` - Time to First Byte in microseconds
+- `dns_us: Optional[int]` - DNS resolution time in microseconds
+- `web_url: Optional[str]` - Test URL
 
 ### Exceptions
 
@@ -234,7 +216,7 @@ from orb import OrbClient, OrbAPIError, OrbConnectionError
 
 async with OrbClient() as client:
     try:
-        datasets = await client.list_datasets()
+        scores = await client.get_scores_1m()
     except OrbAPIError as e:
         print(f"API Error: {e.message}")
         print(f"Status Code: {e.status_code}")
@@ -253,7 +235,8 @@ async with OrbClient() as client:
 You can configure the client using environment variables:
 
 ```bash
-export ORB_BASE_URL="http://localhost:8080"
+export ORB_BASE_URL="http://localhost:7080"
+export ORB_CALLER_ID="my-application"
 export ORB_TIMEOUT="60"
 export ORB_MAX_RETRIES="5"
 ```
@@ -264,6 +247,8 @@ Add custom headers for authentication or other purposes:
 
 ```python
 client = OrbClient(
+    base_url="http://192.168.1.100:7080",
+    caller_id="monitoring-system",
     headers={
         "Authorization": "Bearer your-token",
         "X-Custom-Header": "value"
@@ -271,17 +256,21 @@ client = OrbClient(
 )
 ```
 
-### API Endpoint Customization
+### Caller ID Management
 
-The client uses configurable endpoint paths that can be modified to match the actual Orb API specification. To customize endpoints, you can subclass `OrbClient`:
+The Orb Local API uses caller IDs to track which records have been delivered to each client, ensuring you only receive new data on subsequent requests:
 
 ```python
-class CustomOrbClient(OrbClient):
-    # Update these based on actual Orb API documentation
-    _STATUS_ENDPOINT = "/health"  # Example: if status endpoint is different
-    _DATASETS_ENDPOINT = "/datasets"  # Example: if datasets endpoint is different
-    _DATASET_DETAIL_ENDPOINT = "/datasets/{name}/details"  # Example custom path
-    _DATASET_QUERY_ENDPOINT = "/datasets/{name}/sql"  # Example custom path
+# Each client should use a unique caller ID
+async with OrbClient(caller_id="dashboard-app") as client:
+    scores = await client.get_scores_1m()  # Gets all available records first time
+    
+    # On subsequent calls, only new records since last request are returned
+    new_scores = await client.get_scores_1m()  # Only new records
+
+# Different caller ID gets all records again
+async with OrbClient(caller_id="backup-system") as client:
+    all_scores = await client.get_scores_1m()  # Gets all available records
 ```
 
 ## Development
@@ -314,11 +303,9 @@ mypy orb/
 
 ## Examples
 
-See the `examples/` directory for more comprehensive usage examples:
+See the `examples/` directory for usage examples:
 
-- `examples/basic_usage.py` - Basic client usage
-- `examples/error_handling.py` - Error handling patterns
-- `examples/batch_queries.py` - Batch query operations
+- `examples/basic_usage.py` - Complete example showing all dataset types
 
 ## Contributing
 
@@ -339,4 +326,4 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 - [Orb Datasets Configuration Documentation](https://orb.net/docs/deploy-and-configure/datasets-configuration#local-api) 
 - [Orb Datasets Documentation](https://orb.net/docs/deploy-and-configure/datasets)
 
-> **Note**: This client implementation should be validated against the official Orb API specification. The current endpoints and models are based on common REST patterns and may need adjustment to match the actual Orb Local Analytics API.
+This client implementation is based on the official Orb Local Analytics API specification and provides full support for all documented datasets and endpoints.

@@ -4,229 +4,254 @@ from datetime import datetime
 from typing import Dict, Any
 import pytest
 
-from orb.models import Dataset, DatasetDetails, DatasetQueryResponse, Status
+from orb.models import (
+    BaseDatasetRecord,
+    Scores1mRecord,
+    ResponsivenessRecord,
+    WebResponsivenessRecord,
+    SpeedRecord
+)
 
 
-class TestDataset:
-    """Test cases for Dataset model."""
+class TestBaseDatasetRecord:
+    """Test cases for BaseDatasetRecord model."""
     
-    def test_dataset_minimal(self):
-        """Test Dataset with minimal required fields."""
-        dataset = Dataset(name="test_dataset")
-        assert dataset.name == "test_dataset"
-        assert dataset.description is None
-        assert dataset.created_at is None
-        assert dataset.size is None
-        assert dataset.row_count is None
+    def test_base_dataset_minimal(self):
+        """Test BaseDatasetRecord with minimal required fields."""
+        record = BaseDatasetRecord(
+            orb_id="test123",
+            orb_name="TestOrb",
+            device_name="test-device",
+            orb_version="v1.3.0",
+            timestamp=1640995200000
+        )
+        assert record.orb_id == "test123"
+        assert record.orb_name == "TestOrb"
+        assert record.device_name == "test-device"
+        assert record.orb_version == "v1.3.0"
+        assert record.timestamp == 1640995200000
+        assert record.network_type is None
+        assert record.country_code is None
     
-    def test_dataset_full(self):
-        """Test Dataset with all fields."""
+    def test_base_dataset_full(self):
+        """Test BaseDatasetRecord with all fields."""
         data = {
-            "name": "test_dataset",
-            "description": "A test dataset",
-            "created_at": "2024-01-01T00:00:00Z",
-            "updated_at": "2024-01-02T00:00:00Z",
-            "schema": {"type": "table", "columns": []},
-            "size": 1024,
-            "row_count": 100,
+            "orb_id": "test123",
+            "orb_name": "TestOrb",
+            "device_name": "test-device",
+            "orb_version": "v1.3.0",
+            "timestamp": 1640995200000,
+            "network_type": 1,
+            "network_state": 6,
+            "country_code": "US",
+            "city_name": "Seattle",
+            "isp_name": "Example ISP",
+            "public_ip": "203.0.113.1",
+            "latitude": 47.6,
+            "longitude": -122.3,
+            "location_source": 1
         }
         
-        dataset = Dataset(**data)
-        assert dataset.name == "test_dataset"
-        assert dataset.description == "A test dataset"
-        assert isinstance(dataset.created_at, datetime)
-        assert isinstance(dataset.updated_at, datetime)
-        assert dataset.schema_ == {"type": "table", "columns": []}
-        assert dataset.size == 1024
-        assert dataset.row_count == 100
+        record = BaseDatasetRecord(**data)
+        assert record.orb_id == "test123"
+        assert record.network_type == 1
+        assert record.country_code == "US"
+        assert record.city_name == "Seattle"
+        assert record.public_ip == "203.0.113.1"
+        assert record.latitude == 47.6
+        assert record.longitude == -122.3
     
-    def test_dataset_extra_fields(self):
-        """Test Dataset accepts extra fields."""
+    def test_base_dataset_extra_fields(self):
+        """Test BaseDatasetRecord accepts extra fields."""
         data = {
-            "name": "test_dataset",
+            "orb_id": "test123",
+            "orb_name": "TestOrb", 
+            "device_name": "test-device",
+            "orb_version": "v1.3.0",
+            "timestamp": 1640995200000,
             "extra_field": "extra_value",
             "another_field": 42,
         }
         
-        dataset = Dataset(**data)
-        assert dataset.name == "test_dataset"
-        assert dataset.extra_field == "extra_value"
-        assert dataset.another_field == 42
+        record = BaseDatasetRecord(**data)
+        assert record.orb_id == "test123"
+        assert record.extra_field == "extra_value"
+        assert record.another_field == 42
 
 
-class TestDatasetDetails:
-    """Test cases for DatasetDetails model."""
+class TestScores1mRecord:
+    """Test cases for Scores1mRecord model."""
     
-    def test_dataset_details_minimal(self):
-        """Test DatasetDetails with minimal required fields."""
-        details = DatasetDetails(name="test_dataset")
-        assert details.name == "test_dataset"
-        assert details.columns is None
-        assert details.indexes is None
-        assert details.metadata is None
-    
-    def test_dataset_details_full(self):
-        """Test DatasetDetails with all fields."""
-        data = {
-            "name": "test_dataset",
-            "description": "A detailed test dataset",
-            "created_at": "2024-01-01T00:00:00Z",
-            "updated_at": "2024-01-02T00:00:00Z",
-            "schema": {"type": "table"},
-            "size": 4096,
-            "row_count": 500,
-            "columns": [
-                {"name": "id", "type": "integer", "nullable": False},
-                {"name": "name", "type": "string", "nullable": True},
-            ],
-            "indexes": [
-                {"name": "idx_id", "columns": ["id"], "unique": True},
-            ],
-            "metadata": {
-                "source": "csv",
-                "encoding": "utf-8",
-                "last_refresh": "2024-01-02T12:00:00Z",
-            },
-        }
-        
-        details = DatasetDetails(**data)
-        assert details.name == "test_dataset"
-        assert details.description == "A detailed test dataset"
-        assert len(details.columns) == 2
-        assert details.columns[0]["name"] == "id"
-        assert details.columns[1]["name"] == "name"
-        assert len(details.indexes) == 1
-        assert details.indexes[0]["name"] == "idx_id"
-        assert details.metadata["source"] == "csv"
-
-
-class TestDatasetQueryResponse:
-    """Test cases for DatasetQueryResponse model."""
-    
-    def test_query_response_minimal(self):
-        """Test DatasetQueryResponse with minimal required fields."""
-        response = DatasetQueryResponse(
-            query="SELECT * FROM test",
-            data=[{"id": 1, "name": "test"}],
-            columns=["id", "name"],
-            row_count=1,
+    def test_scores_minimal(self):
+        """Test Scores1mRecord with minimal required fields."""
+        record = Scores1mRecord(
+            orb_id="test123",
+            orb_name="TestOrb",
+            device_name="test-device",
+            orb_version="v1.3.0",
+            timestamp=1640995200000
         )
-        
-        assert response.query == "SELECT * FROM test"
-        assert len(response.data) == 1
-        assert response.data[0] == {"id": 1, "name": "test"}
-        assert response.columns == ["id", "name"]
-        assert response.row_count == 1
-        assert response.execution_time_ms is None
-        assert response.metadata is None
+        assert record.orb_id == "test123"
+        assert record.orb_score is None
+        assert record.responsiveness_score is None
     
-    def test_query_response_full(self):
-        """Test DatasetQueryResponse with all fields."""
+    def test_scores_full(self):
+        """Test Scores1mRecord with all fields."""
         data = {
-            "query": "SELECT id, name FROM users WHERE active = ?",
-            "data": [
-                {"id": 1, "name": "Alice"},
-                {"id": 2, "name": "Bob"},
-                {"id": 3, "name": "Charlie"},
-            ],
-            "columns": ["id", "name"],
-            "row_count": 3,
-            "execution_time_ms": 142.5,
-            "metadata": {
-                "cached": False,
-                "explain_plan": "SeqScan on users",
-                "parameters": [True],
-            },
+            "orb_id": "test123",
+            "orb_name": "TestOrb",
+            "device_name": "test-device",
+            "orb_version": "v1.3.0",
+            "timestamp": 1640995200000,
+            "score_version": "v2.1.0",
+            "orb_score": 85.5,
+            "responsiveness_score": 90.0,
+            "reliability_score": 88.0,
+            "speed_score": 80.0,
+            "speed_age_ms": 300000,
+            "lag_avg_us": 25000.5,
+            "download_avg_kbps": 100000,
+            "upload_avg_kbps": 50000,
+            "unresponsive_ms": 150.0,
+            "measured_ms": 59850.0,
+            "lag_count": 120,
+            "speed_count": 2,
+            "network_type": 1,
+            "country_code": "US"
         }
         
-        response = DatasetQueryResponse(**data)
-        assert response.query == "SELECT id, name FROM users WHERE active = ?"
-        assert len(response.data) == 3
-        assert response.data[1]["name"] == "Bob"
-        assert response.columns == ["id", "name"]
-        assert response.row_count == 3
-        assert response.execution_time_ms == 142.5
-        assert response.metadata["cached"] is False
-        assert response.metadata["parameters"] == [True]
+        record = Scores1mRecord(**data)
+        assert record.orb_score == 85.5
+        assert record.responsiveness_score == 90.0
+        assert record.speed_score == 80.0
+        assert record.lag_avg_us == 25000.5
+        assert record.download_avg_kbps == 100000
+        assert record.upload_avg_kbps == 50000
+        assert record.lag_count == 120
+
+
+class TestResponsivenessRecord:
+    """Test cases for ResponsivenessRecord model."""
     
-    def test_query_response_empty_data(self):
-        """Test DatasetQueryResponse with empty result set."""
-        response = DatasetQueryResponse(
-            query="SELECT * FROM empty_table",
-            data=[],
-            columns=["id", "name"],
-            row_count=0,
+    def test_responsiveness_minimal(self):
+        """Test ResponsivenessRecord with minimal required fields."""
+        record = ResponsivenessRecord(
+            orb_id="test123",
+            orb_name="TestOrb",
+            device_name="test-device",
+            orb_version="v1.3.0",
+            timestamp=1640995200000
         )
-        
-        assert response.query == "SELECT * FROM empty_table"
-        assert response.data == []
-        assert response.columns == ["id", "name"]
-        assert response.row_count == 0
-
-
-class TestStatus:
-    """Test cases for Status model."""
+        assert record.orb_id == "test123"
+        assert record.lag_avg_us is None
+        assert record.packet_loss_pct is None
     
-    def test_status_minimal(self):
-        """Test Status with minimal required fields."""
-        status = Status(status="healthy")
-        assert status.status == "healthy"
-        assert status.version is None
-        assert status.uptime is None
-        assert status.services is None
-        assert status.metrics is None
-    
-    def test_status_full(self):
-        """Test Status with all fields."""
+    def test_responsiveness_full(self):
+        """Test ResponsivenessRecord with all fields."""
         data = {
-            "status": "healthy",
-            "version": "1.2.3",
-            "uptime": "7 days, 14:30:25",
-            "timestamp": "2024-01-01T12:00:00Z",
-            "services": {
-                "database": "running",
-                "cache": "running",
-                "queue": "degraded",
-            },
-            "metrics": {
-                "memory_usage_mb": 2048,
-                "cpu_usage_percent": 35.7,
-                "disk_usage_gb": 15.2,
-                "active_connections": 42,
-                "requests_per_second": "150.3",
-            },
-            "health": {
-                "database_latency_ms": 5.2,
-                "last_backup": "2024-01-01T06:00:00Z",
-                "errors_last_hour": 0,
-            },
+            "orb_id": "test123",
+            "orb_name": "TestOrb",
+            "device_name": "test-device",
+            "orb_version": "v1.3.0",
+            "timestamp": 1640995200000,
+            "network_name": "MyWiFi",
+            "lag_avg_us": 25000,
+            "latency_avg_us": 15000,
+            "jitter_avg_us": 5000,
+            "latency_count": 100.0,
+            "latency_lost_count": 5,
+            "packet_loss_pct": 4.8,
+            "lag_count": 120,
+            "router_lag_avg_us": 20000,
+            "router_latency_avg_us": 12000,
+            "router_packet_loss_pct": 2.0,
+            "pingers": "icmp|8.8.8.8|4,udp|1.1.1.1|4"
         }
         
-        status = Status(**data)
-        assert status.status == "healthy"
-        assert status.version == "1.2.3"
-        assert status.uptime == "7 days, 14:30:25"
-        assert isinstance(status.timestamp, datetime)
-        assert status.services["database"] == "running"
-        assert status.services["queue"] == "degraded"
-        assert status.metrics["memory_usage_mb"] == 2048
-        assert status.metrics["cpu_usage_percent"] == 35.7
-        assert status.metrics["requests_per_second"] == "150.3"
-        assert status.health["database_latency_ms"] == 5.2
-        assert status.health["errors_last_hour"] == 0
+        record = ResponsivenessRecord(**data)
+        assert record.network_name == "MyWiFi"
+        assert record.lag_avg_us == 25000
+        assert record.latency_avg_us == 15000
+        assert record.packet_loss_pct == 4.8
+        assert record.router_lag_avg_us == 20000
+        assert record.pingers == "icmp|8.8.8.8|4,udp|1.1.1.1|4"
+
+
+class TestSpeedRecord:
+    """Test cases for SpeedRecord model."""
     
-    def test_status_extra_fields(self):
-        """Test Status accepts extra fields."""
+    def test_speed_minimal(self):
+        """Test SpeedRecord with minimal required fields."""
+        record = SpeedRecord(
+            orb_id="test123",
+            orb_name="TestOrb",
+            device_name="test-device",
+            orb_version="v1.3.0",
+            timestamp=1640995200000
+        )
+        assert record.orb_id == "test123"
+        assert record.download_kbps is None
+        assert record.upload_kbps is None
+    
+    def test_speed_full(self):
+        """Test SpeedRecord with all fields."""
         data = {
-            "status": "healthy",
-            "custom_field": "custom_value",
-            "build_info": {
-                "commit": "abc123",
-                "branch": "main",
-            },
+            "orb_id": "test123",
+            "orb_name": "TestOrb",
+            "device_name": "test-device",
+            "orb_version": "v1.3.0",
+            "timestamp": 1640995200000,
+            "network_name": "MyWiFi",
+            "download_kbps": 100000,
+            "upload_kbps": 50000,
+            "speed_test_engine": 0,
+            "speed_test_server": "https://speed.cloudflare.com/",
+            "network_type": 1,
+            "country_code": "US"
         }
         
-        status = Status(**data)
-        assert status.status == "healthy"
-        assert status.custom_field == "custom_value"
-        assert status.build_info["commit"] == "abc123"
+        record = SpeedRecord(**data)
+        assert record.download_kbps == 100000
+        assert record.upload_kbps == 50000
+        assert record.speed_test_engine == 0
+        assert record.speed_test_server == "https://speed.cloudflare.com/"
+        assert record.network_name == "MyWiFi"
+
+
+class TestWebResponsivenessRecord:
+    """Test cases for WebResponsivenessRecord model."""
+    
+    def test_web_responsiveness_minimal(self):
+        """Test WebResponsivenessRecord with minimal required fields."""
+        record = WebResponsivenessRecord(
+            orb_id="test123",
+            orb_name="TestOrb",
+            device_name="test-device",
+            orb_version="v1.3.0",
+            timestamp=1640995200000
+        )
+        assert record.orb_id == "test123"  
+        assert record.ttfb_us is None
+        assert record.dns_us is None
+    
+    def test_web_responsiveness_full(self):
+        """Test WebResponsivenessRecord with all fields."""
+        data = {
+            "orb_id": "test123",
+            "orb_name": "TestOrb",
+            "device_name": "test-device",
+            "orb_version": "v1.3.0",
+            "timestamp": 1640995200000,
+            "network_name": "MyWiFi",
+            "ttfb_us": 150000,
+            "dns_us": 25000,
+            "web_url": "https://www.google.com/",
+            "network_type": 1,
+            "country_code": "US"
+        }
+        
+        record = WebResponsivenessRecord(**data)
+        assert record.ttfb_us == 150000
+        assert record.dns_us == 25000
+        assert record.web_url == "https://www.google.com/"
+        assert record.network_name == "MyWiFi"

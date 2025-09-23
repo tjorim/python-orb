@@ -1,9 +1,8 @@
 """Async HTTP client for the Orb local API.
 
-Note: This implementation is based on common REST API patterns. 
-The actual API endpoints and request/response formats should be 
-validated against the official Orb Local Analytics documentation:
+This implementation is based on the official Orb Local Analytics API specification:
 https://orb.net/docs/deploy-and-configure/local-analytics
+https://orb.net/docs/deploy-and-configure/datasets-configuration#local-api
 """
 
 import asyncio
@@ -19,21 +18,18 @@ from tenacity import (
 )
 
 from .exceptions import OrbAPIError, OrbConnectionError
-from .models import Dataset, DatasetDetails, DatasetQueryResponse, Status
 
 
 class OrbClient:
-    """Async HTTP client for Orb local API."""
+    """Async HTTP client for Orb Local API."""
     
-    # API endpoint paths - update these based on actual Orb API specification
-    _STATUS_ENDPOINT = "/api/status"
-    _DATASETS_ENDPOINT = "/api/datasets"
-    _DATASET_DETAIL_ENDPOINT = "/api/datasets/{name}"
-    _DATASET_QUERY_ENDPOINT = "/api/datasets/{name}/query"
+    # API endpoint paths based on official Orb API specification
+    _DATASET_ENDPOINT = "/api/v2/datasets/{name}.{format}"
     
     def __init__(
         self,
-        base_url: str = "http://localhost:8080",
+        base_url: str = "http://localhost:7080",
+        caller_id: str = "python-orb-client",
         timeout: float = 30.0,
         max_retries: int = 3,
         retry_delay: float = 1.0,
@@ -43,13 +39,15 @@ class OrbClient:
         Initialize the Orb client.
         
         Args:
-            base_url: Base URL for the Orb API (default: http://localhost:8080)
+            base_url: Base URL for the Orb API (default: http://localhost:7080)
+            caller_id: Unique caller ID for tracking requests (default: python-orb-client)
             timeout: Request timeout in seconds (default: 30.0)
             max_retries: Maximum number of retry attempts (default: 3)
             retry_delay: Base delay between retries in seconds (default: 1.0)
             headers: Additional headers to include in requests
         """
         self.base_url = base_url.rstrip("/")
+        self.caller_id = caller_id
         self.timeout = timeout
         self.max_retries = max_retries
         self.retry_delay = retry_delay
@@ -160,84 +158,58 @@ class OrbClient:
                 original_error=e,
             ) from e
     
-    async def get_status(self) -> Status:
+    async def get_dataset(
+        self, 
+        name: str, 
+        format: str = "json",
+        caller_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """
-        Get the current status of the Orb system.
+        Get dataset records from the Orb Local API.
         
+        Args:
+            name: Dataset name (e.g., 'scores_1m', 'responsiveness_1s', 'speed_results', 'web_responsiveness_results')
+            format: Response format ('json' or 'jsonl') (default: 'json')
+            caller_id: Override the default caller ID for this request
+            
         Returns:
-            Status object with system information
+            List of dataset records as dictionaries
         """
-        data = await self._request("GET", self._STATUS_ENDPOINT)
-        return Status(**data)
-    
-    async def list_datasets(self) -> List[Dataset]:
-        """
-        List all available datasets.
+        endpoint = self._DATASET_ENDPOINT.format(name=name, format=format)
+        params = {"id": caller_id or self.caller_id}
         
-        Returns:
-            List of Dataset objects
-        """
-        data = await self._request("GET", self._DATASETS_ENDPOINT)
+        data = await self._request("GET", endpoint, params=params)
         
-        # Handle different response formats
-        if isinstance(data, list):
-            datasets = data
-        elif isinstance(data, dict) and "datasets" in data:
-            datasets = data["datasets"]
-        else:
+        # The API returns a JSON array directly
+        if not isinstance(data, list):
             raise OrbAPIError(
-                message="Unexpected response format for list_datasets",
+                message=f"Unexpected response format for dataset {name}",
                 response_data=data,
             )
         
-        return [Dataset(**dataset) for dataset in datasets]
+        return data
     
-    async def get_dataset(self, name: str) -> DatasetDetails:
-        """
-        Get detailed information about a specific dataset.
-        
-        Args:
-            name: Dataset name
-            
-        Returns:
-            DatasetDetails object with comprehensive dataset information
-        """
-        endpoint = self._DATASET_DETAIL_ENDPOINT.format(name=name)
-        data = await self._request("GET", endpoint)
-        return DatasetDetails(**data)
+    # Convenience methods for specific datasets
+    async def get_scores_1m(self, caller_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get 1-minute scores dataset."""
+        return await self.get_dataset("scores_1m", caller_id=caller_id)
     
-    async def query_dataset(
-        self,
-        name: str,
-        query: str,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-        parameters: Optional[Dict[str, Any]] = None,
-    ) -> DatasetQueryResponse:
-        """
-        Execute a query against a dataset.
-        
-        Args:
-            name: Dataset name
-            query: SQL query to execute
-            limit: Maximum number of rows to return
-            offset: Number of rows to skip
-            parameters: Query parameters for parameterized queries
-            
-        Returns:
-            DatasetQueryResponse with query results
-        """
-        json_data = {
-            "query": query,
-        }
-        
-        if limit is not None:
-            json_data["limit"] = limit
-        if offset is not None:
-            json_data["offset"] = offset
-        if parameters:
-            json_data["parameters"] = parameters
-        
-        endpoint = self._DATASET_QUERY_ENDPOINT.format(name=name)
-        data = await self._request("POST", endpoint, json_data=json_data)
-        return DatasetQueryResponse(**data)
+    async def get_responsiveness_1s(self, caller_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get 1-second responsiveness dataset."""
+        return await self.get_dataset("responsiveness_1s", caller_id=caller_id)
+    
+    async def get_responsiveness_15s(self, caller_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get 15-second responsiveness dataset."""
+        return await self.get_dataset("responsiveness_15s", caller_id=caller_id)
+    
+    async def get_responsiveness_1m(self, caller_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get 1-minute responsiveness dataset."""
+        return await self.get_dataset("responsiveness_1m", caller_id=caller_id)
+    
+    async def get_speed_results(self, caller_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get speed test results dataset."""
+        return await self.get_dataset("speed_results", caller_id=caller_id)
+    
+    async def get_web_responsiveness_results(self, caller_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get web responsiveness results dataset."""
+        return await self.get_dataset("web_responsiveness_results", caller_id=caller_id)

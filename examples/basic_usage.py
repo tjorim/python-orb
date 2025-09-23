@@ -2,11 +2,11 @@
 Example usage of the Orb Python client.
 
 This example demonstrates how to use the OrbClient to interact with
-the Orb local API for datasets and status monitoring.
+the Orb Local API for accessing datasets.
 
-Note: This example is based on assumed API endpoints and should be 
-validated against the actual Orb Local Analytics API documentation:
+Based on the official Orb Local Analytics API specification:
 https://orb.net/docs/deploy-and-configure/local-analytics
+https://orb.net/docs/deploy-and-configure/datasets-configuration#local-api
 """
 
 import asyncio
@@ -15,63 +15,56 @@ from orb import OrbClient, OrbError
 
 async def main():
     """Example usage of the Orb client."""
-    # Initialize the client
-    async with OrbClient(base_url="http://localhost:8080") as client:
+    # Initialize the client with default port 7080 and a caller ID
+    async with OrbClient(
+        base_url="http://localhost:7080",
+        caller_id="example-client"
+    ) as client:
         try:
-            # Get system status
-            print("Getting system status...")
-            status = await client.get_status()
-            print(f"Status: {status.status}")
-            if status.version:
-                print(f"Version: {status.version}")
-            if status.uptime:
-                print(f"Uptime: {status.uptime}")
+            print("Orb Local API Client Example")
+            print("=" * 40)
             
-            # List available datasets
-            print("\nListing datasets...")
-            datasets = await client.list_datasets()
-            print(f"Found {len(datasets)} datasets:")
-            for dataset in datasets:
-                print(f"  - {dataset.name}: {dataset.description or 'No description'}")
-                if dataset.row_count:
-                    print(f"    Rows: {dataset.row_count}")
-                if dataset.size:
-                    print(f"    Size: {dataset.size} bytes")
+            # Get scores (1-minute aggregated data)
+            print("\nFetching scores_1m dataset...")
+            scores = await client.get_scores_1m()
+            print(f"Retrieved {len(scores)} score records")
+            if scores:
+                latest = scores[-1]  # Most recent record
+                print(f"Latest Orb Score: {latest.get('orb_score', 'N/A')}")
+                print(f"Responsiveness Score: {latest.get('responsiveness_score', 'N/A')}")
+                print(f"Speed Score: {latest.get('speed_score', 'N/A')}")
             
-            # Get details for the first dataset (if any)
-            if datasets:
-                dataset_name = datasets[0].name
-                print(f"\nGetting details for dataset '{dataset_name}'...")
-                details = await client.get_dataset(dataset_name)
-                print(f"Description: {details.description or 'No description'}")
-                if details.columns:
-                    print(f"Columns: {len(details.columns)}")
-                    for col in details.columns[:3]:  # Show first 3 columns
-                        print(f"  - {col.get('name', 'unknown')}: {col.get('type', 'unknown')}")
-                    if len(details.columns) > 3:
-                        print(f"  ... and {len(details.columns) - 3} more")
-                
-                # Query the dataset
-                print(f"\nQuerying dataset '{dataset_name}'...")
-                try:
-                    result = await client.query_dataset(
-                        dataset_name,
-                        "SELECT * FROM " + dataset_name + " LIMIT 5",
-                        limit=5
-                    )
-                    print(f"Query returned {result.row_count} rows")
-                    print(f"Columns: {', '.join(result.columns)}")
-                    if result.execution_time_ms:
-                        print(f"Execution time: {result.execution_time_ms}ms")
-                    
-                    # Show first few rows
-                    if result.data:
-                        print("Sample data:")
-                        for i, row in enumerate(result.data[:2]):
-                            print(f"  Row {i+1}: {row}")
-                            
-                except OrbError as e:
-                    print(f"Query failed: {e}")
+            # Get responsiveness data (1-second granularity)
+            print("\nFetching responsiveness_1s dataset...")
+            responsiveness = await client.get_responsiveness_1s()
+            print(f"Retrieved {len(responsiveness)} responsiveness records")
+            if responsiveness:
+                latest = responsiveness[-1]
+                print(f"Latest Lag: {latest.get('lag_avg_us', 'N/A')} μs")
+                print(f"Packet Loss: {latest.get('packet_loss_pct', 'N/A')}%")
+            
+            # Get speed test results
+            print("\nFetching speed_results dataset...")
+            speed_tests = await client.get_speed_results()
+            print(f"Retrieved {len(speed_tests)} speed test records")
+            if speed_tests:
+                latest = speed_tests[-1]
+                print(f"Latest Download: {latest.get('download_kbps', 'N/A')} Kbps")
+                print(f"Latest Upload: {latest.get('upload_kbps', 'N/A')} Kbps")
+            
+            # Get web responsiveness data
+            print("\nFetching web_responsiveness_results dataset...")
+            web_resp = await client.get_web_responsiveness_results()
+            print(f"Retrieved {len(web_resp)} web responsiveness records")
+            if web_resp:
+                latest = web_resp[-1]
+                print(f"Latest TTFB: {latest.get('ttfb_us', 'N/A')} μs")
+                print(f"Latest DNS: {latest.get('dns_us', 'N/A')} μs")
+            
+            # Example of using generic method with different formats
+            print("\nFetching dataset in JSONL format...")
+            jsonl_data = await client.get_dataset("scores_1m", format="jsonl")
+            print(f"Retrieved {len(jsonl_data)} records in JSONL format")
             
         except OrbError as e:
             print(f"Error: {e}")

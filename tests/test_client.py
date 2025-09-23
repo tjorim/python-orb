@@ -7,7 +7,6 @@ import httpx
 import respx
 
 from orb import OrbClient, OrbAPIError, OrbConnectionError
-from orb.models import Dataset, DatasetDetails, DatasetQueryResponse, Status
 
 
 class TestOrbClient:
@@ -16,7 +15,8 @@ class TestOrbClient:
     def test_init_default_params(self):
         """Test client initialization with default parameters."""
         client = OrbClient()
-        assert client.base_url == "http://localhost:8080"
+        assert client.base_url == "http://localhost:7080"
+        assert client.caller_id == "python-orb-client"
         assert client.timeout == 30.0
         assert client.max_retries == 3
         assert client.retry_delay == 1.0
@@ -25,206 +25,229 @@ class TestOrbClient:
         """Test client initialization with custom parameters."""
         client = OrbClient(
             base_url="http://custom.example.com:9090/",
+            caller_id="my-custom-client",
             timeout=60.0,
             max_retries=5,
             retry_delay=2.0,
             headers={"X-Custom": "test"},
         )
         assert client.base_url == "http://custom.example.com:9090"
+        assert client.caller_id == "my-custom-client"
         assert client.timeout == 60.0
         assert client.max_retries == 5
         assert client.retry_delay == 2.0
     
     def test_build_url(self, client):
         """Test URL building."""
-        assert client._build_url("/api/status") == "http://test.example.com/api/status"
-        assert client._build_url("api/status") == "http://test.example.com/api/status"
-        assert client._build_url("api/datasets/test") == "http://test.example.com/api/datasets/test"
+        assert client._build_url("/api/v2/datasets/scores_1m.json") == "http://test.example.com/api/v2/datasets/scores_1m.json"
+        assert client._build_url("api/v2/datasets/scores_1m.json") == "http://test.example.com/api/v2/datasets/scores_1m.json"
     
     @pytest.mark.asyncio
     async def test_context_manager(self, mock_respx):
         """Test async context manager usage."""
-        async with OrbClient(base_url="http://test.example.com") as client:
+        async with OrbClient(base_url="http://test.example.com", caller_id="test") as client:
             assert isinstance(client, OrbClient)
     
     @pytest.mark.asyncio
-    async def test_get_status_success(self, client, mock_respx):
-        """Test successful status retrieval."""
-        mock_data = {
-            "status": "healthy",
-            "version": "1.0.0",
-            "uptime": "5 days",
-            "timestamp": "2024-01-01T00:00:00Z",
-            "services": {"database": "running", "api": "running"},
-            "metrics": {"memory_usage": 1024, "cpu_usage": 50.5},
-        }
-        
-        mock_respx.get("http://test.example.com/api/status").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        
-        status = await client.get_status()
-        
-        assert isinstance(status, Status)
-        assert status.status == "healthy"
-        assert status.version == "1.0.0"
-        assert status.uptime == "5 days"
-        assert status.services == {"database": "running", "api": "running"}
-        assert status.metrics == {"memory_usage": 1024, "cpu_usage": 50.5}
-    
-    @pytest.mark.asyncio
-    async def test_list_datasets_success(self, client, mock_respx):
-        """Test successful dataset listing."""
+    async def test_get_dataset_success(self, client, mock_respx):
+        """Test successful dataset retrieval."""
         mock_data = [
             {
-                "name": "dataset1",
-                "description": "Test dataset 1",
-                "created_at": "2024-01-01T00:00:00Z",
-                "size": 1024,
-                "row_count": 100,
+                "orb_id": "test123",
+                "orb_name": "TestOrb",
+                "device_name": "test-device",
+                "orb_version": "v1.3.0",
+                "timestamp": 1640995200000,
+                "orb_score": 85.5,
+                "responsiveness_score": 90.0,
+                "speed_score": 80.0,
+                "network_type": 1,
+                "country_code": "US"
             },
             {
-                "name": "dataset2", 
-                "description": "Test dataset 2",
-                "created_at": "2024-01-02T00:00:00Z",
-                "size": 2048,
-                "row_count": 200,
-            },
+                "orb_id": "test123",
+                "orb_name": "TestOrb",
+                "device_name": "test-device",
+                "orb_version": "v1.3.0",
+                "timestamp": 1640995260000,
+                "orb_score": 87.2,
+                "responsiveness_score": 92.0,
+                "speed_score": 82.0,
+                "network_type": 1,
+                "country_code": "US"
+            }
         ]
         
-        mock_respx.get("http://test.example.com/api/datasets").mock(
+        mock_respx.get("http://test.example.com/api/v2/datasets/scores_1m.json").mock(
             return_value=httpx.Response(200, json=mock_data)
         )
         
-        datasets = await client.list_datasets()
+        records = await client.get_dataset("scores_1m")
         
-        assert len(datasets) == 2
-        assert all(isinstance(d, Dataset) for d in datasets)
-        assert datasets[0].name == "dataset1"
-        assert datasets[0].description == "Test dataset 1"
-        assert datasets[0].size == 1024
-        assert datasets[0].row_count == 100
-        assert datasets[1].name == "dataset2"
+        assert len(records) == 2
+        assert all(isinstance(record, dict) for record in records)
+        assert records[0]["orb_score"] == 85.5
+        assert records[1]["orb_score"] == 87.2
     
     @pytest.mark.asyncio
-    async def test_list_datasets_wrapped_response(self, client, mock_respx):
-        """Test dataset listing with wrapped response format."""
-        mock_data = {
-            "datasets": [
-                {
-                    "name": "dataset1",
-                    "description": "Test dataset 1",
-                    "size": 1024,
-                }
-            ]
-        }
+    async def test_get_scores_1m(self, client, mock_respx):
+        """Test convenience method for scores_1m."""
+        mock_data = [
+            {
+                "orb_id": "test123",
+                "orb_name": "TestOrb", 
+                "device_name": "test-device",
+                "orb_version": "v1.3.0",
+                "timestamp": 1640995200000,
+                "orb_score": 75.0,
+                "responsiveness_score": 80.0,
+                "speed_score": 70.0
+            }
+        ]
         
-        mock_respx.get("http://test.example.com/api/datasets").mock(
+        mock_respx.get("http://test.example.com/api/v2/datasets/scores_1m.json").mock(
             return_value=httpx.Response(200, json=mock_data)
         )
         
-        datasets = await client.list_datasets()
+        records = await client.get_scores_1m()
         
-        assert len(datasets) == 1
-        assert datasets[0].name == "dataset1"
+        assert len(records) == 1
+        assert records[0]["orb_score"] == 75.0
     
     @pytest.mark.asyncio
-    async def test_get_dataset_success(self, client, mock_respx):
-        """Test successful dataset details retrieval."""
-        mock_data = {
-            "name": "test_dataset",
-            "description": "A test dataset",
-            "created_at": "2024-01-01T00:00:00Z",
-            "updated_at": "2024-01-02T00:00:00Z",
-            "schema": {"type": "table", "columns": []},
-            "size": 4096,
-            "row_count": 500,
-            "columns": [
-                {"name": "id", "type": "integer"},
-                {"name": "name", "type": "string"},
-            ],
-            "indexes": [{"name": "idx_id", "columns": ["id"]}],
-            "metadata": {"source": "test"},
-        }
+    async def test_get_responsiveness_1s(self, client, mock_respx):
+        """Test convenience method for responsiveness_1s."""
+        mock_data = [
+            {
+                "orb_id": "test123",
+                "orb_name": "TestOrb",
+                "device_name": "test-device", 
+                "orb_version": "v1.3.0",
+                "timestamp": 1640995200000,
+                "lag_avg_us": 25000,
+                "latency_avg_us": 15000,
+                "packet_loss_pct": 0.5
+            }
+        ]
         
-        mock_respx.get("http://test.example.com/api/datasets/test_dataset").mock(
+        mock_respx.get("http://test.example.com/api/v2/datasets/responsiveness_1s.json").mock(
             return_value=httpx.Response(200, json=mock_data)
         )
         
-        dataset = await client.get_dataset("test_dataset")
+        records = await client.get_responsiveness_1s()
         
-        assert isinstance(dataset, DatasetDetails)
-        assert dataset.name == "test_dataset"
-        assert dataset.description == "A test dataset"
-        assert dataset.size == 4096
-        assert dataset.row_count == 500
-        assert len(dataset.columns) == 2
-        assert len(dataset.indexes) == 1
-        assert dataset.metadata == {"source": "test"}
+        assert len(records) == 1
+        assert records[0]["lag_avg_us"] == 25000
     
     @pytest.mark.asyncio
-    async def test_query_dataset_success(self, client, mock_respx):
-        """Test successful dataset query."""
-        mock_data = {
-            "query": "SELECT * FROM test_table LIMIT 10",
-            "data": [
-                {"id": 1, "name": "Alice"},
-                {"id": 2, "name": "Bob"},
-            ],
-            "columns": ["id", "name"],
-            "row_count": 2,
-            "execution_time_ms": 150.5,
-            "metadata": {"cached": False},
-        }
+    async def test_get_speed_results(self, client, mock_respx):
+        """Test convenience method for speed_results."""
+        mock_data = [
+            {
+                "orb_id": "test123",
+                "orb_name": "TestOrb",
+                "device_name": "test-device",
+                "orb_version": "v1.3.0", 
+                "timestamp": 1640995200000,
+                "download_kbps": 100000,
+                "upload_kbps": 50000,
+                "speed_test_server": "https://speed.cloudflare.com/"
+            }
+        ]
         
-        mock_respx.post("http://test.example.com/api/datasets/test_dataset/query").mock(
+        mock_respx.get("http://test.example.com/api/v2/datasets/speed_results.json").mock(
             return_value=httpx.Response(200, json=mock_data)
         )
         
-        result = await client.query_dataset(
-            "test_dataset",
-            "SELECT * FROM test_table LIMIT 10",
-            limit=10,
-            offset=0,
-            parameters={"param1": "value1"},
+        records = await client.get_speed_results()
+        
+        assert len(records) == 1
+        assert records[0]["download_kbps"] == 100000
+        assert records[0]["upload_kbps"] == 50000
+    
+    @pytest.mark.asyncio
+    async def test_get_web_responsiveness_results(self, client, mock_respx):
+        """Test convenience method for web_responsiveness_results."""
+        mock_data = [
+            {
+                "orb_id": "test123",
+                "orb_name": "TestOrb",
+                "device_name": "test-device",
+                "orb_version": "v1.3.0",
+                "timestamp": 1640995200000,
+                "ttfb_us": 150000,
+                "dns_us": 25000,
+                "web_url": "https://www.google.com/"
+            }
+        ]
+        
+        mock_respx.get("http://test.example.com/api/v2/datasets/web_responsiveness_results.json").mock(
+            return_value=httpx.Response(200, json=mock_data)
         )
         
-        assert isinstance(result, DatasetQueryResponse)
-        assert result.query == "SELECT * FROM test_table LIMIT 10"
-        assert len(result.data) == 2
-        assert result.columns == ["id", "name"]
-        assert result.row_count == 2
-        assert result.execution_time_ms == 150.5
-        assert result.metadata == {"cached": False}
+        records = await client.get_web_responsiveness_results()
+        
+        assert len(records) == 1
+        assert records[0]["ttfb_us"] == 150000
+        assert records[0]["dns_us"] == 25000
+    
+    @pytest.mark.asyncio
+    async def test_get_dataset_with_caller_id(self, client, mock_respx):
+        """Test dataset retrieval with custom caller ID."""
+        mock_data = [{"orb_id": "test123", "timestamp": 1640995200000}]
+        
+        mock_respx.get("http://test.example.com/api/v2/datasets/scores_1m.json").mock(
+            return_value=httpx.Response(200, json=mock_data)
+        )
+        
+        records = await client.get_dataset("scores_1m", caller_id="custom-caller")
+        
+        # Verify the request was made with the custom caller ID
+        request = mock_respx.calls[0].request
+        assert "id=custom-caller" in str(request.url)
+    
+    @pytest.mark.asyncio
+    async def test_get_dataset_jsonl_format(self, client, mock_respx):
+        """Test dataset retrieval with JSONL format."""
+        mock_data = [{"orb_id": "test123", "timestamp": 1640995200000}]
+        
+        mock_respx.get("http://test.example.com/api/v2/datasets/scores_1m.jsonl").mock(
+            return_value=httpx.Response(200, json=mock_data)
+        )
+        
+        records = await client.get_dataset("scores_1m", format="jsonl")
+        
+        assert len(records) == 1
+        assert records[0]["orb_id"] == "test123"
     
     @pytest.mark.asyncio
     async def test_api_error_handling(self, client, mock_respx):
         """Test API error handling."""
-        mock_respx.get("http://test.example.com/api/status").mock(
+        mock_respx.get("http://test.example.com/api/v2/datasets/scores_1m.json").mock(
             return_value=httpx.Response(
-                500, 
-                json={"error": "Internal server error", "code": "INTERNAL_ERROR"}
+                404, 
+                json={"error": "Dataset not found", "code": "NOT_FOUND"}
             )
         )
         
         with pytest.raises(OrbAPIError) as exc_info:
-            await client.get_status()
+            await client.get_dataset("scores_1m")
         
         error = exc_info.value
-        assert error.status_code == 500
-        assert "Internal server error" in error.message
-        assert error.response_data["error"] == "Internal server error"
-        assert error.response_data["code"] == "INTERNAL_ERROR"
+        assert error.status_code == 404
+        assert "Dataset not found" in error.message
+        assert error.response_data["error"] == "Dataset not found"
+        assert error.response_data["code"] == "NOT_FOUND"
     
     @pytest.mark.asyncio
     async def test_connection_error_handling(self, client, mock_respx):
         """Test connection error handling."""
-        mock_respx.get("http://test.example.com/api/status").mock(
+        mock_respx.get("http://test.example.com/api/v2/datasets/scores_1m.json").mock(
             side_effect=httpx.NetworkError("Connection failed")
         )
         
         with pytest.raises(OrbConnectionError) as exc_info:
-            await client.get_status()
+            await client.get_dataset("scores_1m")
         
         error = exc_info.value
         assert "Network error" in error.message
@@ -233,12 +256,12 @@ class TestOrbClient:
     @pytest.mark.asyncio
     async def test_timeout_error_handling(self, client, mock_respx):
         """Test timeout error handling."""
-        mock_respx.get("http://test.example.com/api/status").mock(
+        mock_respx.get("http://test.example.com/api/v2/datasets/scores_1m.json").mock(
             side_effect=httpx.TimeoutException("Request timed out")
         )
         
         with pytest.raises(OrbConnectionError) as exc_info:
-            await client.get_status()
+            await client.get_dataset("scores_1m")
         
         error = exc_info.value
         assert "Timeout" in error.message
@@ -247,26 +270,26 @@ class TestOrbClient:
     @pytest.mark.asyncio
     async def test_invalid_json_response(self, client, mock_respx):
         """Test handling of invalid JSON responses."""
-        mock_respx.get("http://test.example.com/api/status").mock(
+        mock_respx.get("http://test.example.com/api/v2/datasets/scores_1m.json").mock(
             return_value=httpx.Response(200, text="invalid json")
         )
         
         with pytest.raises(OrbAPIError) as exc_info:
-            await client.get_status()
+            await client.get_dataset("scores_1m")
         
         error = exc_info.value
         assert "Failed to parse JSON response" in error.message
         assert "invalid json" in error.response_data["raw_response"]
     
     @pytest.mark.asyncio
-    async def test_list_datasets_unexpected_format(self, client, mock_respx):
-        """Test handling of unexpected response format in list_datasets."""
-        mock_respx.get("http://test.example.com/api/datasets").mock(
-            return_value=httpx.Response(200, json={"unexpected": "format"})
+    async def test_non_array_response(self, client, mock_respx):
+        """Test handling of non-array responses."""
+        mock_respx.get("http://test.example.com/api/v2/datasets/scores_1m.json").mock(
+            return_value=httpx.Response(200, json={"error": "not an array"})
         )
         
         with pytest.raises(OrbAPIError) as exc_info:
-            await client.list_datasets()
+            await client.get_dataset("scores_1m")
         
         error = exc_info.value
         assert "Unexpected response format" in error.message
