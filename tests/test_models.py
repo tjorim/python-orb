@@ -1,6 +1,5 @@
 """Test the Pydantic models."""
 
-from datetime import datetime
 from typing import Dict, Any
 import pytest
 
