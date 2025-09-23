@@ -97,9 +97,9 @@ class OrbClient:
 
     async def __aexit__(
         self, 
-        exc_type: Type[BaseException] | None, 
-        exc: BaseException | None, 
-        tb: TracebackType | None
+        exc_type: Optional[Type[BaseException]], 
+        exc: Optional[BaseException], 
+        tb: Optional[TracebackType]
     ) -> None:
         """Close the httpx client when exiting the async context."""
         if self._client:
