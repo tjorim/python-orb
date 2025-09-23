@@ -2,6 +2,8 @@
 
 Async Python client for the Orb local API — query datasets, manage configurations, and fetch analytics from Orb locally.
 
+> **⚠️ Important Notice**: This is a template implementation based on common REST API patterns. The API endpoints, models, and functionality should be validated and updated according to the actual Orb Local Analytics API specification from the [official documentation](https://orb.net/docs/deploy-and-configure/local-analytics).
+
 ## Features
 
 - **Async/await support**: Built with `httpx` for modern async Python applications
@@ -269,6 +271,19 @@ client = OrbClient(
 )
 ```
 
+### API Endpoint Customization
+
+The client uses configurable endpoint paths that can be modified to match the actual Orb API specification. To customize endpoints, you can subclass `OrbClient`:
+
+```python
+class CustomOrbClient(OrbClient):
+    # Update these based on actual Orb API documentation
+    _STATUS_ENDPOINT = "/health"  # Example: if status endpoint is different
+    _DATASETS_ENDPOINT = "/datasets"  # Example: if datasets endpoint is different
+    _DATASET_DETAIL_ENDPOINT = "/datasets/{name}/details"  # Example custom path
+    _DATASET_QUERY_ENDPOINT = "/datasets/{name}/sql"  # Example custom path
+```
+
 ## Development
 
 ### Running Tests
@@ -321,4 +336,7 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 ## References
 
 - [Orb Local Analytics Documentation](https://orb.net/docs/deploy-and-configure/local-analytics)
+- [Orb Datasets Configuration Documentation](https://orb.net/docs/deploy-and-configure/datasets-configuration#local-api) 
 - [Orb Datasets Documentation](https://orb.net/docs/deploy-and-configure/datasets)
+
+> **Note**: This client implementation should be validated against the official Orb API specification. The current endpoints and models are based on common REST patterns and may need adjustment to match the actual Orb Local Analytics API.

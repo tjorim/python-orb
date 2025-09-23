@@ -1,4 +1,10 @@
-"""Async HTTP client for the Orb local API."""
+"""Async HTTP client for the Orb local API.
+
+Note: This implementation is based on common REST API patterns. 
+The actual API endpoints and request/response formats should be 
+validated against the official Orb Local Analytics documentation:
+https://orb.net/docs/deploy-and-configure/local-analytics
+"""
 
 import asyncio
 from typing import Any, Dict, List, Optional, Union
@@ -18,6 +24,12 @@ from .models import Dataset, DatasetDetails, DatasetQueryResponse, Status
 
 class OrbClient:
     """Async HTTP client for Orb local API."""
+    
+    # API endpoint paths - update these based on actual Orb API specification
+    _STATUS_ENDPOINT = "/api/status"
+    _DATASETS_ENDPOINT = "/api/datasets"
+    _DATASET_DETAIL_ENDPOINT = "/api/datasets/{name}"
+    _DATASET_QUERY_ENDPOINT = "/api/datasets/{name}/query"
     
     def __init__(
         self,
@@ -155,7 +167,7 @@ class OrbClient:
         Returns:
             Status object with system information
         """
-        data = await self._request("GET", "/api/status")
+        data = await self._request("GET", self._STATUS_ENDPOINT)
         return Status(**data)
     
     async def list_datasets(self) -> List[Dataset]:
@@ -165,7 +177,7 @@ class OrbClient:
         Returns:
             List of Dataset objects
         """
-        data = await self._request("GET", "/api/datasets")
+        data = await self._request("GET", self._DATASETS_ENDPOINT)
         
         # Handle different response formats
         if isinstance(data, list):
@@ -190,7 +202,8 @@ class OrbClient:
         Returns:
             DatasetDetails object with comprehensive dataset information
         """
-        data = await self._request("GET", f"/api/datasets/{name}")
+        endpoint = self._DATASET_DETAIL_ENDPOINT.format(name=name)
+        data = await self._request("GET", endpoint)
         return DatasetDetails(**data)
     
     async def query_dataset(
@@ -225,5 +238,6 @@ class OrbClient:
         if parameters:
             json_data["parameters"] = parameters
         
-        data = await self._request("POST", f"/api/datasets/{name}/query", json_data=json_data)
+        endpoint = self._DATASET_QUERY_ENDPOINT.format(name=name)
+        data = await self._request("POST", endpoint, json_data=json_data)
         return DatasetQueryResponse(**data)

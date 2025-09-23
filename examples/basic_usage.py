@@ -3,6 +3,10 @@ Example usage of the Orb Python client.
 
 This example demonstrates how to use the OrbClient to interact with
 the Orb local API for datasets and status monitoring.
+
+Note: This example is based on assumed API endpoints and should be 
+validated against the actual Orb Local Analytics API documentation:
+https://orb.net/docs/deploy-and-configure/local-analytics
 """
 
 import asyncio

@@ -3,6 +3,9 @@ Async Python client for the Orb local API.
 
 This package provides an asynchronous HTTP client for interacting with Orb's 
 local API, including endpoints for datasets and status monitoring.
+
+Note: This is a template implementation that should be validated against
+the official Orb Local Analytics API documentation before production use.
 """
 
 from .client import OrbClient
