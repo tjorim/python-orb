@@ -2,7 +2,7 @@
 
 import pytest
 import respx
-import httpx
+
 from orb import OrbClient
 
 
