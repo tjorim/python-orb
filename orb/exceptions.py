@@ -1,11 +1,11 @@
 """Exception classes for the Orb client."""
 
-from typing import Optional, Any, Dict
+from typing import Any, Dict, Optional
 
 
 class OrbError(Exception):
     """Base exception for all Orb client errors."""
-    
+
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None) -> None:
         super().__init__(message)
         self.message = message
@@ -14,10 +14,10 @@ class OrbError(Exception):
 
 class OrbAPIError(OrbError):
     """Exception raised for API-level errors."""
-    
+
     def __init__(
-        self, 
-        message: str, 
+        self,
+        message: str,
         status_code: Optional[int] = None,
         response_data: Optional[Dict[str, Any]] = None,
         details: Optional[Dict[str, Any]] = None
@@ -29,10 +29,10 @@ class OrbAPIError(OrbError):
 
 class OrbConnectionError(OrbError):
     """Exception raised for connection-related errors."""
-    
+
     def __init__(
-        self, 
-        message: str, 
+        self,
+        message: str,
         original_error: Optional[Exception] = None,
         details: Optional[Dict[str, Any]] = None
     ) -> None:
