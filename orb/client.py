@@ -5,18 +5,13 @@ from types import TracebackType
 from typing import Any, Dict, List, Optional, Type
 from urllib.parse import urljoin
 
-import httpx
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
+import aiohttp
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from .exceptions import OrbAPIError, OrbConnectionError
 
 logging.basicConfig(
-    level=logging.INFO, 
+    level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger: logging.Logger = logging.getLogger(__name__)
@@ -28,9 +23,12 @@ class OrbClient:
     Attributes:
         base_url (str): The base URL for the Orb Local API.
         caller_id (str): Unique caller ID for tracking requests.
-        timeout (float): Request timeout in seconds.
+        timeout (aiohttp.ClientTimeout): Request timeout configuration.
         max_retries (int): Maximum number of retry attempts.
         retry_delay (float): Base delay between retries in seconds.
+        session (aiohttp.ClientSession, optional): The HTTP session used for API requests.
+            If not provided, a new session will be created and managed internally.
+            If provided, the session lifecycle must be managed externally.
 
     """
 
@@ -45,6 +43,7 @@ class OrbClient:
         max_retries: int = 3,
         retry_delay: float = 1.0,
         headers: Optional[Dict[str, str]] = None,
+        session: Optional[aiohttp.ClientSession] = None,
     ) -> None:
         """Initialize the Orb client.
 
@@ -55,14 +54,16 @@ class OrbClient:
             max_retries: Maximum number of retry attempts (default: 3)
             retry_delay: Base delay between retries in seconds (default: 1.0)
             headers: Additional headers to include in requests
+            session: An existing aiohttp session. Defaults to None.
 
         """
         self.base_url = base_url.rstrip("/")
         self.caller_id = caller_id
-        self.timeout = timeout
+        self.timeout = aiohttp.ClientTimeout(total=timeout)
         self.max_retries = max_retries
         self.retry_delay = retry_delay
-        self._owns_client = True  # Track ownership
+        self.session: Optional[aiohttp.ClientSession] = session
+        self._owns_session = session is None  # Track ownership
 
         default_headers = {
             "User-Agent": (
@@ -76,48 +77,43 @@ class OrbClient:
             default_headers.update(headers)
 
         self._headers = default_headers
-        # Initialize client immediately for backward compatibility
-        self._client = httpx.AsyncClient(
-            timeout=self.timeout,
-            headers=self._headers,
-        )
         logger.info("OrbClient instance created")
 
     async def __aenter__(self) -> "OrbClient":
-        """Initialize the httpx client when entering the async context."""
-        if self._client and not self._client.is_closed:
-            logger.debug("Using existing httpx client")
-        elif not self._client or self._client.is_closed:
-            logger.debug("Creating new internal httpx client")
-            self._client = httpx.AsyncClient(
+        """Initialize the aiohttp client session when entering the async context."""
+        if self.session and not self.session.closed:
+            logger.debug("Using externally provided session")
+        elif not self.session or self.session.closed:
+            logger.debug("Creating new internal aiohttp session")
+            self.session = aiohttp.ClientSession(
                 timeout=self.timeout,
                 headers=self._headers,
             )
         return self
 
     async def __aexit__(
-        self, 
-        exc_type: Optional[Type[BaseException]], 
-        exc: Optional[BaseException], 
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc: Optional[BaseException],
         tb: Optional[TracebackType]
     ) -> None:
-        """Close the httpx client when exiting the async context."""
-        if self._client:
-            if self._client.is_closed:
-                logger.debug("Client is already closed, skipping closure")
-            elif not self._owns_client:
-                logger.debug("Client is externally provided; not closing it")
+        """Close the aiohttp client session when exiting the async context."""
+        if self.session:
+            if self.session.closed:
+                logger.debug("Session is already closed, skipping closure")
+            elif not self._owns_session:
+                logger.debug("Session is externally provided; not closing it")
             else:
-                logger.debug("Closing httpx client")
+                logger.debug("Closing aiohttp session")
                 try:
-                    await self._client.aclose()
+                    await self.session.close()
                 except Exception as e:
-                    logger.error("Error while closing httpx client: %s", e)
+                    logger.error("Error while closing aiohttp session: %s", e)
 
     async def close(self) -> None:
         """Close the HTTP client."""
-        if self._client and not self._client.is_closed:
-            await self._client.aclose()
+        if self.session and not self.session.closed:
+            await self.session.close()
 
     def _build_url(self, endpoint: str) -> str:
         """Build full URL for an endpoint."""
@@ -126,7 +122,7 @@ class OrbClient:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
-        retry=retry_if_exception_type((httpx.NetworkError, httpx.TimeoutException)),
+        retry=retry_if_exception_type((aiohttp.ClientError, aiohttp.ServerTimeoutError)),
     )
     async def _request(
         self,
@@ -152,77 +148,70 @@ class OrbClient:
 
         """
         logger.info("Starting request to endpoint: %s", endpoint)
-        if self._client is None or self._client.is_closed:
+        if self.session is None or self.session.closed:
             logger.error(
-                "Client not initialized or closed. "
-                "Use 'async with' context manager to initialize the client."
+                "Session not initialized or closed. "
+                "Use 'async with' context manager to initialize the session."
             )
             raise OrbConnectionError(
-                "Client not initialized or closed. "
+                "Session not initialized or closed. "
                 "Use 'async with' context manager."
             )
 
         url = self._build_url(endpoint)
 
         try:
-            response = await self._client.request(
+            async with self.session.request(
                 method=method,
                 url=url,
                 params=params,
                 json=json_data,
-            )
+            ) as response:
+                # Check for HTTP errors
+                if response.status >= 400:
+                    try:
+                        error_data = await response.json()
+                    except Exception:
+                        error_data = {"error": await response.text()}
 
-            # Check for HTTP errors
-            if response.status_code >= 400:
+                    logger.error(
+                        "Request failed with status code: %s, response: %s",
+                        response.status,
+                        error_data
+                    )
+                    raise OrbAPIError(
+                        message=(
+                            f"HTTP {response.status}: "
+                            f"{error_data.get('error', 'Unknown error')}"
+                        ),
+                        status_code=response.status,
+                        response_data=error_data,
+                    )
+
+                # Parse JSON response
                 try:
-                    error_data = response.json()
-                except Exception:
-                    error_data = {"error": response.text}
+                    json_response = await response.json()
+                    if not json_response:
+                        logger.warning("Empty response received")
+                    return json_response
+                except Exception as e:
+                    logger.error("Failed to parse JSON response: %s", e)
+                    raise OrbAPIError(
+                        message=f"Failed to parse JSON response: {e}",
+                        status_code=response.status,
+                        response_data={"raw_response": await response.text()},
+                    ) from e
 
-                logger.error(
-                    "Request failed with status code: %s, response: %s", 
-                    response.status_code, 
-                    error_data
-                )
-                raise OrbAPIError(
-                    message=(
-                        f"HTTP {response.status_code}: "
-                        f"{error_data.get('error', 'Unknown error')}"
-                    ),
-                    status_code=response.status_code,
-                    response_data=error_data,
-                )
-
-            # Parse JSON response
-            try:
-                json_data = response.json()
-                if not json_data:
-                    logger.warning("Empty response received")
-                return json_data
-            except Exception as e:
-                logger.error("Failed to parse JSON response: %s", e)
-                raise OrbAPIError(
-                    message=f"Failed to parse JSON response: {e}",
-                    status_code=response.status_code,
-                    response_data={"raw_response": response.text},
-                ) from e
-
-        except httpx.NetworkError as e:
-            logger.error("Network error connecting to %s: %s", url, e)
+        except aiohttp.ClientError as e:
+            logger.error("Client error connecting to %s: %s", url, e)
             raise OrbConnectionError(
-                message=f"Network error connecting to {url}: {e}",
+                message=f"Client error connecting to {url}: {e}",
                 original_error=e,
             ) from e
-        except httpx.TimeoutException as e:
+        except aiohttp.ServerTimeoutError as e:
             logger.error("Timeout connecting to %s: %s", url, e)
             raise OrbConnectionError(
                 message=f"Timeout connecting to {url}: {e}",
-                original_error=e,
-            ) from e
-        except httpx.HTTPError as e:
-            logger.error("HTTP error: %s", e)
-            raise OrbConnectionError(
-                message=f"HTTP error: {e}",
                 original_error=e,
             ) from e
 
@@ -235,7 +224,7 @@ class OrbClient:
         """Get dataset records from the Orb Local API.
 
         Args:
-            name: Dataset name (e.g., 'scores_1m', 'responsiveness_1s', 
+            name: Dataset name (e.g., 'scores_1m', 'responsiveness_1s',
                   'speed_results', 'web_responsiveness_results')
             format: Response format ('json' or 'jsonl') (default: 'json')
             caller_id: Override the default caller ID for this request

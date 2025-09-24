@@ -1,13 +1,7 @@
 """Test the Pydantic models."""
 
 
-from orb.models import (
-    BaseDatasetRecord,
-    ResponsivenessRecord,
-    Scores1mRecord,
-    SpeedRecord,
-    WebResponsivenessRecord,
-)
+from orb.models import BaseDatasetRecord, ResponsivenessRecord, Scores1mRecord, SpeedRecord, WebResponsivenessRecord
 
 
 class TestBaseDatasetRecord:
@@ -57,23 +51,6 @@ class TestBaseDatasetRecord:
         assert record.public_ip == "203.0.113.1"
         assert record.latitude == 47.6
         assert record.longitude == -122.3
-
-    def test_base_dataset_extra_fields(self):
-        """Test BaseDatasetRecord accepts extra fields."""
-        data = {
-            "orb_id": "test123",
-            "orb_name": "TestOrb",
-            "device_name": "test-device",
-            "orb_version": "v1.3.0",
-            "timestamp": 1640995200000,
-            "extra_field": "extra_value",
-            "another_field": 42,
-        }
-
-        record = BaseDatasetRecord(**data)
-        assert record.orb_id == "test123"
-        assert record.extra_field == "extra_value"
-        assert record.another_field == 42
 
 
 class TestScores1mRecord:

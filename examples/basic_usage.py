@@ -1,5 +1,4 @@
-"""
-Example usage of the Orb Python client.
+"""Example usage of the Orb Python client.
 
 This example demonstrates how to use the OrbClient to interact with
 the Orb Local API for accessing datasets.

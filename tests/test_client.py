@@ -1,6 +1,6 @@
 """Test the OrbClient class."""
 
-import httpx
+
 import pytest
 
 from orb import OrbAPIError, OrbClient, OrbConnectionError
@@ -14,7 +14,7 @@ class TestOrbClient:
         client = OrbClient()
         assert client.base_url == "http://localhost:7080"
         assert client.caller_id == "python-orb-client"
-        assert client.timeout == 30.0
+        assert client.timeout.total == 30.0
         assert client.max_retries == 3
         assert client.retry_delay == 1.0
 
@@ -30,7 +30,7 @@ class TestOrbClient:
         )
         assert client.base_url == "http://custom.example.com:9090"
         assert client.caller_id == "my-custom-client"
-        assert client.timeout == 60.0
+        assert client.timeout.total == 60.0
         assert client.max_retries == 5
         assert client.retry_delay == 2.0
 
@@ -40,10 +40,12 @@ class TestOrbClient:
         assert client._build_url("api/v2/datasets/scores_1m.json") == "http://test.example.com/api/v2/datasets/scores_1m.json"
 
     @pytest.mark.asyncio
-    async def test_context_manager(self, mock_respx):
+    async def test_context_manager(self):
         """Test async context manager usage."""
         async with OrbClient(base_url="http://test.example.com", caller_id="test") as client:
             assert isinstance(client, OrbClient)
+            assert client.session is not None
+            assert not client.session.closed
 
     @pytest.mark.asyncio
     async def test_get_dataset_success(self, client, mock_respx):
